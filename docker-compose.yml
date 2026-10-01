@@ -37,7 +37,10 @@ services:
       SERVE_UI: "true"
 
       PAPERCLIP_DEPLOYMENT_MODE: "authenticated"
-      PAPERCLIP_DEPLOYMENT_EXPOSURE: "private"
+      PAPERCLIP_DEPLOYMENT_EXPOSURE: "public"
+
+      PAPERCLIP_SECRETS_STRICT_MODE: "true"
+      PAPERCLIP_AUTH_DISABLE_SIGN_UP: "true"
 
       PAPERCLIP_PUBLIC_URL: "https://${PAPERCLIP_HOSTNAME:-paperclip.cochet.cloud}"
 
