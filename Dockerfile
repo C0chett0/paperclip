@@ -157,10 +157,9 @@ WORKDIR /app
 # never hit the layer cache and rebuilds on every build.
 RUN echo "cli-tools-epoch: ${CLI_TOOLS_CACHE_EPOCH}" \
   && npm install --global --omit=dev @anthropic-ai/claude-code@latest @openai/codex@latest opencode-ai @google/gemini-cli@latest @moonshot-ai/kimi-code@latest \
-  && mkdir -p /paperclip \
-  && env HOME=/paperclip bash -c 'curl https://cursor.com/install -fsS | bash' \
-  && /paperclip/.local/bin/agent --version \
-  && chown -R node:node /paperclip \
+  && mkdir -p /opt/cursor \
+  && env HOME=/opt/cursor bash -c 'curl https://cursor.com/install -fsS | bash' \
+  && PATH="/opt/cursor/.local/bin:$PATH" agent --version \
   && apt-get update \
   && apt-get install -y --no-install-recommends openssh-client jq \
   && rm -rf /var/lib/apt/lists/* \
@@ -180,7 +179,7 @@ COPY --chown=node:node --from=build /app /app
 ARG PAPERCLIP_BUILD_VERSION=""
 ARG PAPERCLIP_BUILD_COMMIT=""
 ENV NODE_ENV=production \
-  PATH=/paperclip/.local/bin:$PATH \
+  PATH=/opt/cursor/.local/bin:$PATH \
   HOME=/paperclip \
   HOST=0.0.0.0 \
   PORT=3100 \
