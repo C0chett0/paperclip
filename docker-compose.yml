@@ -1,0 +1,101 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: paperclip
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}"
+      POSTGRES_DB: paperclip
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U paperclip -d paperclip"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+    networks:
+      - backend
+
+
+  server:
+    image: "${PAPERCLIP_IMAGE:-paperclip-local:dev}"
+    restart: unless-stopped
+
+    # Conservé du Compose officiel Paperclip :
+    # évite qu'un agent qui fuit des processus épuise les PID du host.
+    pids_limit: 2048
+
+    environment:
+      DATABASE_URL: "postgres://paperclip:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@db:5432/paperclip"
+
+      HOST: "0.0.0.0"
+      PORT: "3100"
+      SERVE_UI: "true"
+
+      PAPERCLIP_DEPLOYMENT_MODE: "authenticated"
+      PAPERCLIP_DEPLOYMENT_EXPOSURE: "private"
+
+      PAPERCLIP_PUBLIC_URL: "https://${PAPERCLIP_HOSTNAME:-paperclip.cochet.cloud}"
+
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set}"
+      PAPERCLIP_AGENT_JWT_SECRET: "${PAPERCLIP_AGENT_JWT_SECRET:?PAPERCLIP_AGENT_JWT_SECRET must be set}"
+      PAPERCLIP_TOOL_ACTION_SIGNING_SECRET: "${PAPERCLIP_TOOL_ACTION_SIGNING_SECRET:?PAPERCLIP_TOOL_ACTION_SIGNING_SECRET must be set}"
+
+    volumes:
+      - paperclip-data:/paperclip
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3100/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+    networks:
+      backend:
+      apps:
+        aliases:
+          - paperclip
+        gw_priority: 1
+
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "apps"
+
+      traefik.http.routers.paperclip.entrypoints: "web"
+      traefik.http.routers.paperclip.rule: "Host(`${PAPERCLIP_HOSTNAME:-paperclip.cochet.cloud}`)"
+      traefik.http.routers.paperclip.service: "paperclip"
+
+      traefik.http.services.paperclip.loadbalancer.server.port: "3100"
+
+
+volumes:
+  pgdata:
+    name: paperclip-pgdata
+
+  paperclip-data:
+    name: paperclip-data
+
+
+networks:
+  backend:
+    name: paperclip-backend
+    internal: true
+
+  apps:
+    external: true
+    name: apps

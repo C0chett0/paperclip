@@ -1,0 +1,148 @@
+name: Build homelab image
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - production
+
+permissions: {}
+
+concurrency:
+  group: paperclip-homelab-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-amd64:
+    name: Build amd64 image
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Compute build metadata
+        id: metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="$(git describe --tags --match 'v*' --long --dirty 2>/dev/null || true)"
+          tools_epoch="$(date -u +%G-W%V)"
+
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tools_epoch=${tools_epoch}" >> "$GITHUB_OUTPUT"
+
+          echo "Build version: ${version:-<none>}"
+          echo "Tools epoch: ${tools_epoch}"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.4
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # Paperclip upstream fait lui-même cette étape avant son Docker build.
+      # Elle remet le lockfile en cohérence avec les métadonnées de packages
+      # sans installer les dépendances ni exécuter de scripts.
+      - name: Refresh lockfile for Docker build context
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          pnpm install \
+            --resolution-only \
+            --ignore-scripts \
+            --no-frozen-lockfile
+
+          changed="$(git status --porcelain)"
+
+          if [ -z "$changed" ]; then
+            echo "Lockfile already matches package metadata."
+            exit 0
+          fi
+
+          if printf '%s\n' "$changed" | grep -Fvq ' pnpm-lock.yaml'; then
+            echo "Unexpected files changed during lockfile refresh:"
+            echo "$changed"
+            exit 1
+          fi
+
+          echo "Using refreshed pnpm-lock.yaml in Docker build context."
+
+      # L'image Paperclip est assez lourde à construire.
+      # L'upstream nettoie également le runner avant son build.
+      - name: Free runner disk
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Disk before cleanup:"
+          df -h
+
+          pnpm store prune || true
+          sudo apt-get clean || true
+
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/share/swift \
+            /usr/local/lib/android \
+            /usr/local/share/boost \
+            /usr/local/share/powershell \
+            /opt/ghc \
+            /opt/hostedtoolcache/CodeQL \
+            /opt/hostedtoolcache/PyPy \
+            /opt/hostedtoolcache/Ruby || true
+
+          docker system prune -af || true
+
+          echo "Disk after cleanup:"
+          df -h
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build and push production image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: production
+          platforms: linux/amd64
+          push: true
+
+          tags: |
+            ghcr.io/c0chett0/paperclip:sha-${{ github.sha }}
+
+          build-args: |
+            PAPERCLIP_BUILD_VERSION=${{ steps.metadata.outputs.version }}
+            PAPERCLIP_BUILD_COMMIT=${{ github.sha }}
+            CLI_TOOLS_CACHE_EPOCH=${{ steps.metadata.outputs.tools_epoch }}
+
+          labels: |
+            org.opencontainers.image.source=https://github.com/C0chett0/paperclip
+            org.opencontainers.image.revision=${{ github.sha }}
+
+          cache-from: |
+            type=registry,ref=ghcr.io/c0chett0/paperclip:buildcache-amd64
+
+          cache-to: |
+            type=registry,ref=ghcr.io/c0chett0/paperclip:buildcache-amd64,mode=max
