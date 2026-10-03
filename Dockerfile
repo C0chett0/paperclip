@@ -166,6 +166,11 @@ RUN echo "cli-tools-epoch: ${CLI_TOOLS_CACHE_EPOCH}" \
   && mkdir -p /paperclip \
   && chown node:node /paperclip
 
+# Runtime libraries required by Chromium for the magazine Playwright tests.
+# Keep the Playwright version aligned with /workspaces/magazine.
+RUN npx --yes playwright@1.62.1 install-deps chromium \
+  && rm -rf /root/.npm /var/lib/apt/lists/*
+
 COPY scripts/docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 

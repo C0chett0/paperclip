@@ -48,8 +48,13 @@ services:
       PAPERCLIP_AGENT_JWT_SECRET: "${PAPERCLIP_AGENT_JWT_SECRET:?PAPERCLIP_AGENT_JWT_SECRET must be set}"
       PAPERCLIP_TOOL_ACTION_SIGNING_SECRET: "${PAPERCLIP_TOOL_ACTION_SIGNING_SECRET:?PAPERCLIP_TOOL_ACTION_SIGNING_SECRET must be set}"
 
+      CURSOR_API_KEY: "${CURSOR_API_KEY:?CURSOR_API_KEY must be set}"
+
     volumes:
       - paperclip-data:/paperclip
+      - /opt/magazine/app:/workspaces/magazine
+      - /opt/openclaw-data/config/workspace-conservateur/memory:/workspaces/memory:ro
+      - cabinet-publications:/srv/cabinet
 
     depends_on:
       db:
@@ -92,6 +97,9 @@ volumes:
 
   paperclip-data:
     name: paperclip-data
+  cabinet-publications:
+    external: true
+    name: cabinet-publications
 
 
 networks:
