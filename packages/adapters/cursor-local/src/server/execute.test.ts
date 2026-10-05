@@ -349,4 +349,66 @@ printf '%s\\n' '{"type":"result","subtype":"success","session_id":"cursor-sessio
       await fs.rm(rootDir, { recursive: true, force: true });
     }
   });
+
+  it("classifies a no-progress Cursor turn with a preserved session as transient", async () => {
+    setPrepareCursorSandboxCommand.mockReset();
+    setPrepareCursorSandboxCommand.mockImplementation(async (input) => {
+      const actual =
+        await vi.importActual<typeof import("./remote-command.js")>(
+          "./remote-command.js",
+        );
+      return actual.prepareCursorSandboxCommand(input);
+    });
+
+    const root = await fs.mkdtemp(
+      path.join(os.tmpdir(), "paperclip-cursor-no-progress-"),
+    );
+    const agentPath = path.join(root, "agent");
+
+    await fs.writeFile(
+      agentPath,
+      `#!/bin/sh
+cat >/dev/null
+printf '%s\n' '{"type":"system","subtype":"init","session_id":"cursor-session-no-progress","model":"auto"}'
+printf '%s\n' 'RetriableError: Agent turn stopped after repeated resume attempts made no progress' >&2
+exit 1
+`,
+    );
+    await fs.chmod(agentPath, 0o755);
+
+    try {
+      const result = await execute({
+        runId: "run-cursor-no-progress",
+        agent: {
+          id: "agent-1",
+          companyId: "company-1",
+          name: "Cursor Coder",
+          adapterType: "cursor",
+          adapterConfig: {},
+        },
+        runtime: {
+          sessionId: null,
+          sessionParams: null,
+          sessionDisplayId: null,
+          taskKey: null,
+        },
+        config: {
+          command: agentPath,
+          cwd: root,
+          promptTemplate: "Continue the task.",
+        },
+        context: {},
+        authToken: "run-jwt-token",
+        onLog: async () => {},
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.sessionId).toBe("cursor-session-no-progress");
+      expect(result.errorCode).toBe("cursor_no_progress");
+      expect(result.errorFamily).toBe("transient_upstream");
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
 });

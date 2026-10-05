@@ -757,9 +757,13 @@ export {
 export const ACTIVE_RUN_OUTPUT_PROGRESS_FLUSH_INTERVAL_MS = 60 * 1000;
 export const ACTIVE_RUN_LOG_RUNTIME_STATUS_REFRESH_INTERVAL_MS = 5 * 1000;
 export const BOUNDED_TRANSIENT_HEARTBEAT_RETRY_DELAYS_MS = [
-  30_000, 30_000,
+  30_000,
+  240_000,
+  1440_000,
+  3600_000,
+  10_800_000,
 ] as const;
-const BOUNDED_TRANSIENT_HEARTBEAT_RETRY_JITTER_RATIO = 0;
+const BOUNDED_TRANSIENT_HEARTBEAT_RETRY_JITTER_RATIO = 0.20;
 const BOUNDED_TRANSIENT_HEARTBEAT_RETRY_REASON = "transient_failure";
 const BOUNDED_TRANSIENT_HEARTBEAT_RETRY_WAKE_REASON = "transient_failure_retry";
 function isTransientWorkspaceGitScanCode(code: string | null | undefined): boolean {
@@ -17831,8 +17835,17 @@ export function heartbeatService(
     );
     const cancellationAcknowledged =
       parseObject(result?.executionCancellation).state === "acknowledged";
+    const safeCursorNoProgressContinuation =
+      agent.adapterType === "cursor" &&
+      outcome === "cancelled" &&
+      options?.errorCode === "cursor_no_progress";
+
     return options?.conversationContinuationEligible !== false && outcome !== "succeeded" &&
-      (outcome !== "cancelled" || cancellationAcknowledged) &&
+      (
+        outcome !== "cancelled" ||
+        cancellationAcknowledged ||
+        safeCursorNoProgressContinuation
+      ) &&
       isConversationAdapter(agent.adapterType)
       ? { ...result, conversationContinuation: CONVERSATION_CONTINUATION_POLICY }
       : result;
@@ -24345,7 +24358,9 @@ export function heartbeatService(
           outcome === "timed_out"
             ? "timeout"
             : outcome === "cancelled"
-              ? (latestRun?.errorCode ?? "cancelled")
+              ? (adapterResult.errorCode === "cursor_no_progress"
+                  ? "cursor_no_progress"
+                  : (latestRun?.errorCode ?? "cancelled"))
               : outcome === "failed"
                 ? (adapterResult.errorCode ??
                   recordedResponsibleUserDenialCode ??
@@ -24744,7 +24759,11 @@ export function heartbeatService(
               });
             }
           } else if (
-            outcome === "failed" &&
+            (
+              outcome === "failed" ||
+              (outcome === "cancelled" &&
+                runErrorCode === "cursor_no_progress")
+            ) &&
             readTransientRecoveryContractFromRun(livenessRun)
           ) {
             await scheduleBoundedRetryForRun(livenessRun, agent);

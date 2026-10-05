@@ -728,6 +728,16 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       stderrLine ||
       `Cursor exited with code ${attempt.proc.exitCode ?? -1}`;
 
+    // Cursor peut abandonner un turn après plusieurs tentatives de reprise sans
+    // progrès, tout en ayant déjà persisté une session réutilisable. Ce cas est
+    // transitoire et peut être repris sans rejouer la tâche depuis zéro.
+    const cursorNoProgressRetryable =
+      (attempt.proc.exitCode ?? 0) !== 0 &&
+      Boolean(resolvedSessionId) &&
+      /RetriableError:\s*Agent turn stopped after repeated resume attempts made no progress/i.test(
+        fallbackErrorMessage,
+      );
+
     return {
       exitCode: attempt.proc.exitCode,
       signal: attempt.proc.signal,
@@ -739,7 +749,10 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       // Forward the transport-level error code from the run-disposition seam. A
       // lost duplex control channel surfaces the typed `duplex_channel_lost`
       // code; every other result carries no code here.
-      errorCode: attempt.proc.errorCode ?? null,
+      errorCode:
+        attempt.proc.errorCode ??
+        (cursorNoProgressRetryable ? "cursor_no_progress" : null),
+      errorFamily: cursorNoProgressRetryable ? "transient_upstream" : null,
       usage: attempt.parsed.usage,
       sessionId: resolvedSessionId,
       sessionParams: resolvedSessionParams,
