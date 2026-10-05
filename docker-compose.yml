@@ -50,6 +50,8 @@ services:
 
       CURSOR_API_KEY: "${CURSOR_API_KEY:?CURSOR_API_KEY must be set}"
 
+      HEARTBEAT_SCHEDULER_ENABLED: "true"
+
     volumes:
       - paperclip-data:/paperclip
       - /opt/magazine/app:/workspaces/magazine
