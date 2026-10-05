@@ -131,6 +131,7 @@ jobs:
 
           tags: |
             ghcr.io/c0chett0/paperclip:sha-${{ github.sha }}
+            ghcr.io/c0chett0/paperclip:homelab-latest
 
           build-args: |
             PAPERCLIP_BUILD_VERSION=${{ steps.metadata.outputs.version }}
