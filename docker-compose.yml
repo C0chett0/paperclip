@@ -54,9 +54,10 @@ services:
 
     volumes:
       - paperclip-data:/paperclip
+      - cabinet-publications:/srv/cabinet
       - /opt/magazine/app:/workspaces/magazine
       - /opt/openclaw-data/config/workspace-conservateur/memory:/workspaces/memory:ro
-      - cabinet-publications:/srv/cabinet
+      - /opt/magazine/graphic-assets:/workspaces/graphic-assets
 
     depends_on:
       db:
