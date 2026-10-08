@@ -460,6 +460,13 @@ function buildWakeText(
     "- POST /api/issues/{issueId}/comments",
     "- PATCH /api/issues/{issueId}",
     "- POST /api/companies/{companyId}/issues (when asked to create a new issue)",
+    "- GET /api/issues/{issueId}/documents",
+    "- GET /api/issues/{issueId}/documents/{key}",
+    "- GET /api/issues/{issueId}/documents/{key}/revisions",
+    "- GET /api/issues/{issueId}/work-products",
+    "- GET /api/issues/{issueId}/attachments",
+    "- GET /api/attachments/{attachmentId}",
+    "- GET /api/attachments/{attachmentId}/content",
     ...(structuredWakePrompt
       ? [
           "",
